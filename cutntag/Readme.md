@@ -1,6 +1,10 @@
 # CUT&Tag Analysis Pipeline
 
-## Preprocessing
+This repository provides a complete CUT&Tag analysis pipeline for transcription factors or histone modifications. The pipeline is divided into **preprocessing** and **post-analysis** workflows, allowing reproducible and scalable processing of sequencing data.
+
+---
+
+## 1. Preprocessing
 A reproducible pipeline for processing CUT&Tag sequencing data, including:
 	•	adapter trimming
 	•	genome alignment
@@ -9,9 +13,9 @@ A reproducible pipeline for processing CUT&Tag sequencing data, including:
 
 The pipeline is optimized for HPC environments using SLURM and GNU Parallel.
 
-⸻
+---
 
-### Overview
+### 1.1 Overview
 
 This workflow performs the following steps:
 	1.	Adapter trimming using Trim Galore
@@ -21,9 +25,9 @@ This workflow performs the following steps:
 
 The pipeline processes multiple samples in parallel to efficiently use HPC resources.
 
-⸻
+---
 
-### Requirements
+### 1.2 Requirements
 
 Software
 
@@ -44,9 +48,9 @@ Activate the environment:
 conda activate cutntag
 ```
 
-⸻
+---
 
-### Input Data
+### 1.3 Input Data
 
 The pipeline expects paired-end FASTQ files named as:
 ```txt
@@ -66,27 +70,23 @@ raw/
 ├── sample2_R2.fq.gz
 ```
 
-⸻
+---
 
-### Project Structure
+### 1.4 Project Structure
 
 Recommended directory structure:
 ```txt
 project/
-│
 ├── raw/            # raw FASTQ files
 ├── trimmed/        # trimmed reads
 ├── bam/            # aligned BAM files
-├── bw/             # bigWig coverage tracks
-│
-├── preprocess.sh   # alignment pipeline
-└── README.md
+└── bw/             # bigWig coverage tracks
 ```
-Output folders will be automatically created.
+Output folders will be automatically created. The script file could be stored elsewhere.
 
-⸻
+---
 
-### Running the Pipeline (HPC)
+### 1.5 Running the Pipeline (HPC)
 
 Submit the preprocessing job using SLURM:
 
@@ -97,9 +97,9 @@ The pipeline will:
 	•	allocate 12 threads per sample
 	•	use 36 total CPUs
 
-⸻
+---
 
-### Pipeline Script
+### 1.6 Pipeline Script
 
 preprocess.sh
 ```bash
@@ -162,9 +162,9 @@ echo "=== Done ${sample} ==="
 echo "ALL DONE!"
 ```
 
-⸻
+---
 
-### Output Files
+### 1.7 Output Files
 ```txt
 File	Description
 trimmed/*.fq.gz	Adapter-trimmed reads
@@ -173,17 +173,17 @@ bam/*.bam.bai	BAM index
 bw/*.bw	CPM-normalized coverage track
 ```
 
-⸻
+---
 
-### Visualization
+### 1.8 Visualization
 
 The generated bigWig files can be visualized in genome browsers such as:
 	•	IGV
 	•	UCSC Genome Browser
 
-⸻
+---
 
-### Troubleshooting
+### 1.9 Troubleshooting
 
 Job fails immediately
 
@@ -201,12 +201,12 @@ Possible causes:
 
 Check trimming reports produced by Trim Galore.
 
-⸻
+---
 
-### Notes
+### 1.10 Notes
 	•	Samples are automatically detected from raw/*_R1.fq.gz.
 	•	Ensure sufficient CPU allocation when adjusting parallel -j.
 
-⸻
+---
 
-## Post-analysis
+## 2. Post-analysis
