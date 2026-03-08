@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prompt for project path if not provided
+if [ $# -lt 1 ]; then
+    read -p "Enter the project directory path: " dir
+else
+    dir=$1
+fi
+
+# Prompt for genome path if not provided
+if [ $# -lt 2 ]; then
+    read -p "Enter the genome directory path: " genome
+else
+    genome=$2
+fi
+
+# Prompt for motif database path if not provided
+if [ $# -lt 3 ]; then
+    read -p "Enter the motif database path: " motif_db
+else
+    motif_db=$3
+fi
+
+# Prompt for target motif path if not provided
+if [ $# -lt 4 ]; then
+    read -p "Enter the target motif path: " tf_meme
+else
+    tf_meme=$4
+fi
+
+t=6  # threads per job
+jobs=3  # number of parallel samples
+
+cd "${dir}"
+
+mkdir -p qc log peaks bw memechip fimo
+
+
+# Function to process a single BAM file
+process_sample() {
+    local i=$1
+    local sample=$(basename "${i%.bam}")
+
+    echo "=== Processing sample: ${sample} ==="
+
+    # Peak calling
+    peak_file="peaks/${sample}_peaks.narrowPeak"
+    if [ ! -f "${peak_file}" ]; then
+        echo "  Calling peaks for ${sample}"
+        macs3 callpeak \
+            -t "bam/${sample}.bam" \
+            -f BAMPE \
+            -g hs \
+            -n "peaks/${sample}" \
+            -q 0.01 \
+            -B --SPMR \
+            > "log/${sample}_macs3.log" 2>&1
+
+        bedGraphToBigWig "peaks/${sample}_treat_pileup.bdg" \
+            "${genome}/hg38.chrom.sizes" \
+            "peaks/${sample}_SPMR_FE.bw"
+    else
+        echo "  Peaks already exist for ${sample}, skipping peak calling."
+    fi
+
+    # Coverage track
+    bw_file="bw/${sample}.bw"
+    if [ ! -f "${bw_file}" ]; then
+        echo "  Generating coverage track for ${sample}"
+        bamCoverage \
+            -b "bam/${sample}.bam" \
+            -o "${bw_file}" \
+            --normalizeUsing CPM \
+            --binSize 50 \
+            -p "${t}" \
+            > "log/${sample}_bw.log" 2>&1
+    else
+        echo "  Coverage track already exists for ${sample}, skipping bamCoverage."
+    fi
+
+    # QC
+    qc_dir="qc/${sample}"
+    if [ ! -d "${qc_dir}" ]; then
+        echo "  Running Qualimap QC for ${sample}"
+        qualimap bamqc \
+            -bam "bam/${sample}.bam" \
+            -outdir "${qc_dir}" \
+            -nt "${t}" \
+            --java-mem-size=8G \
+            > "log/${sample}_qualimap.log" 2>&1
+    else
+        echo "  QC already exists for ${sample}, skipping Qualimap."
+    fi
+
+    # Convert narrowPeak to BED
+    bed_file="peaks/${sample}_peaks.bed"
+    if [ ! -f "${bed_file}" ]; then
+        cut -f 1-3 "peaks/${sample}_peaks.narrowPeak" > "${bed_file}"
+        echo "✅ Created BED file for ${sample}"
+    else
+        echo "  BED file already exists for ${sample}, skipping."
+    fi
+
+    # Extract sequences from genome
+    fasta_file="peaks/${sample}_peaks.fasta"
+    if [ ! -f "${fasta_file}" ]; then
+        bedtools getfasta \
+            -fi "${genome}/Homo_sapiens.GRCh38.dna.primary_assembly.fa" \
+            -bed "${bed_file}" \
+            -fo "${fasta_file}"
+        fasta-unique-names -r "${fasta_file}"
+        echo "✅ Extracted FASTA sequences for ${sample}"
+    else
+        echo "  FASTA file already exists for ${sample}, skipping."
+    fi
+
+
+    # Run MEME-ChIP motif discovery
+    meme_output="memechip/${sample}"
+    if [ ! -d "${meme_output}" ]; then
+        meme-chip -oc "${meme_output}" -time 240 -ccut 100 -dna -order 2 -minw 5 -maxw 8 -db ${motif_db} -meme-mod zoops -meme-nmotifs 3 -meme-searchsize 100000 -streme-pvt 0.05 -streme-align center -streme-totallength 4000000 -centrimo-score 5.0 -centrimo-ethresh 10.0 ${fasta_file}
+        
+        echo "✅ MEME-ChIP completed for ${sample}"
+    else
+        echo "  MEME-ChIP output exists for ${sample}, skipping."
+    fi
+
+    # Run FIMO motif scanning
+    fimo_output="fimo/${sample}"
+    if [ ! -d "${fimo_output}" ]; then
+        fimo \
+            --verbosity 1 \
+            --oc "${fimo_output}" \
+            "${tf_meme}" \
+            "${fasta_file}"
+        echo "✅ FIMO scanning completed for ${sample}"
+    else
+        echo "  FIMO output exists for ${sample}, skipping."
+    fi
+    
+    echo "✅ Done ${sample}"
+}
+
+export -f process_sample
+export genome
+export t
+
+# Run all BAMs in parallel
+ls bam/*.bam | parallel -j ${jobs} process_sample {}
+
+echo "🎉 ALL DONE"

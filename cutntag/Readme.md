@@ -5,6 +5,7 @@ This repository provides a complete CUT&Tag analysis pipeline for transcription 
 ---
 
 ## 1. Preprocessing
+
 A reproducible pipeline for processing CUT&Tag sequencing data, including:
 	•	adapter trimming
 	•	genome alignment
@@ -39,11 +40,14 @@ Install the following tools:
 	•	GNU Parallel
 
 Optional (local installation via Conda)
+
 ```bash
 conda create -n cutntag -c bioconda -c conda-forge python=3.11 \
 trim-galore bowtie2 samtools deeptools parallel meme -y
 ```
+
 Activate the environment:
+
 ```bash
 conda activate cutntag
 ```
@@ -53,15 +57,20 @@ conda activate cutntag
 ### 1.3 Input Data
 
 The pipeline expects paired-end FASTQ files named as:
+
 ```txt
 sample_R1.fq.gz
 sample_R2.fq.gz
 ```
+
 All FASTQ files should be placed in:
+
 ```txt
 raw/
 ```
+
 Example:
+
 ```txt
 raw/
 ├── sample1_R1.fq.gz
@@ -75,6 +84,7 @@ raw/
 ### 1.4 Project Structure
 
 Recommended directory structure:
+
 ```txt
 project/
 ├── raw/            # raw FASTQ files
@@ -82,6 +92,7 @@ project/
 ├── bam/            # aligned BAM files
 └── bw/             # bigWig coverage tracks
 ```
+
 Output folders will be automatically created. The script file could be stored elsewhere.
 
 ---
@@ -102,6 +113,7 @@ The pipeline will:
 ### 1.6 Pipeline Script
 
 preprocess.sh
+
 ```bash
 #!/bin/bash
 #SBATCH -J cutntag
@@ -165,21 +177,24 @@ echo "ALL DONE!"
 ---
 
 ### 1.7 Output Files
-```txt
-File	Description
-trimmed/*.fq.gz	Adapter-trimmed reads
-bam/*.bam	Sorted alignment files
-bam/*.bam.bai	BAM index
-bw/*.bw	CPM-normalized coverage track
-```
+
+| File            | Description                   |
+| --------------- | ----------------------------- |
+| trimmed/*.fq.gz | Adapter-trimmed reads         |
+| bam/*.bam       | Sorted alignment files        |
+| bam/*.bam.bai   | BAM index                     |
+| bw/*.bw         | CPM-normalized coverage track |
 
 ---
 
 ### 1.8 Visualization
 
 The generated bigWig files can be visualized in genome browsers such as:
+
+```txt
 	•	IGV
 	•	UCSC Genome Browser
+```
 
 ---
 
@@ -188,10 +203,12 @@ The generated bigWig files can be visualized in genome browsers such as:
 Job fails immediately
 
 Check the SLURM log files:
+
 ```txt
 cutntag_JOBID.log
 cutntag_JOBID.err
 ```
+
 Low alignment rate
 
 Possible causes:
@@ -204,9 +221,50 @@ Check trimming reports produced by Trim Galore.
 ---
 
 ### 1.10 Notes
-	•	Samples are automatically detected from raw/*_R1.fq.gz.
+
+    •	Samples are automatically detected from raw/*_R1.fq.gz.
 	•	Ensure sufficient CPU allocation when adjusting parallel -j.
 
 ---
 
 ## 2. Post-analysis
+
+### 2.1 Overview
+
+The post-analysis workflow takes preprocessed BAM and bigWig files to perform peak calling, reproducibility assessment, signal visualization, motif discovery, and differential binding analysis.
+
+---
+
+### 2.2 Requirements
+
+Software: MACS3, deepTools, MEME/HOMER, SAMtools, bedtools
+Conda Environment (recommended):
+
+```bash
+conda create -n cutntag -c bioconda -c conda-forge python=3.11 meme -y
+conda install qualimap
+```
+
+> **Note:** Use Python 3.11 for better compatibility with all required tools and packages.
+
+---
+
+### 2.3 Input Data
+
+The post-analysis workflow requires BAM files produced by the preprocessing steps.
+
+---
+
+### 2.4 Project Structure
+
+### 2.5 Running the Pipeline (MacOS)
+
+### 2.6 Pipeline Script
+
+### 2.7 Output Files
+
+### 2.8 Visualization
+
+### 2.9 Troubleshooting
+
+### 2.10 Notes
