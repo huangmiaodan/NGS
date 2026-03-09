@@ -7,6 +7,7 @@ if [ $# -lt 1 ]; then
 else
     dir=$1
 fi
+cd "${dir}"
 
 # Prompt for genome path if not provided
 if [ $# -lt 2 ]; then
@@ -32,7 +33,7 @@ fi
 t=6  # threads per job
 jobs=3  # number of parallel samples
 
-cd "${dir}"
+
 
 mkdir -p qc log peaks bw memechip fimo
 
