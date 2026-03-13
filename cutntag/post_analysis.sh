@@ -34,9 +34,7 @@ t=6  # threads per job
 jobs=3  # number of parallel samples
 
 
-
-mkdir -p qc log peaks bw memechip fimo
-
+mkdir -p qc logs peaks bw memechip fimo results results/frip
 
 # Function to process a single BAM file
 process_sample() {
@@ -56,11 +54,13 @@ process_sample() {
             -n "peaks/${sample}" \
             -q 0.01 \
             -B --SPMR \
-            > "log/${sample}_macs3.log" 2>&1
+            > "logs/${sample}_macs3.log" 2>&1
 
         bedGraphToBigWig "peaks/${sample}_treat_pileup.bdg" \
             "${genome}/hg38.chrom.sizes" \
             "peaks/${sample}_SPMR_FE.bw"
+
+
     else
         echo "  Peaks already exist for ${sample}, skipping peak calling."
     fi
@@ -75,7 +75,7 @@ process_sample() {
             --normalizeUsing CPM \
             --binSize 50 \
             -p "${t}" \
-            > "log/${sample}_bw.log" 2>&1
+            > "logs/${sample}_bw.log" 2>&1
     else
         echo "  Coverage track already exists for ${sample}, skipping bamCoverage."
     fi
@@ -89,7 +89,7 @@ process_sample() {
             -outdir "${qc_dir}" \
             -nt "${t}" \
             --java-mem-size=8G \
-            > "log/${sample}_qualimap.log" 2>&1
+            > "logs/${sample}_qualimap.log" 2>&1
     else
         echo "  QC already exists for ${sample}, skipping Qualimap."
     fi
@@ -97,10 +97,18 @@ process_sample() {
     # Convert narrowPeak to BED
     bed_file="peaks/${sample}_peaks.bed"
     if [ ! -f "${bed_file}" ]; then
-        cut -f 1-3 "peaks/${sample}_peaks.narrowPeak" > "${bed_file}"
+        cut -f 1-3 "${peak_file}" > "${bed_file}"
         echo "✅ Created BED file for ${sample}"
     else
         echo "  BED file already exists for ${sample}, skipping."
+    fi
+
+    # Calculating FRiP
+    saf_file="peaks/${sample}.saf"
+    if [ ! -f "${saf_file}" ]; then 
+        awk 'OFS="\t" {print $1"-"$2+1"-"$3, $1, $2+1, $3, "+"}' $peak_file > peaks/${sample}.saf
+        # Run featureCounts
+        featureCounts -p -a peaks/${sample}.saf -F SAF -o results/frip/${sample}.txt $i
     fi
 
     # Extract sequences from genome
@@ -116,8 +124,6 @@ process_sample() {
         echo "  FASTA file already exists for ${sample}, skipping."
     fi
 
-
-    # Run MEME-ChIP motif discovery
     meme_output="memechip/${sample}"
     if [ ! -d "${meme_output}" ]; then
         meme-chip -oc "${meme_output}" -time 240 -ccut 100 -dna -order 2 -minw 5 -maxw 8 -db ${motif_db} -meme-mod zoops -meme-nmotifs 3 -meme-searchsize 100000 -streme-pvt 0.05 -streme-align center -streme-totallength 4000000 -centrimo-score 5.0 -centrimo-ethresh 10.0 ${fasta_file}
@@ -139,15 +145,30 @@ process_sample() {
     else
         echo "  FIMO output exists for ${sample}, skipping."
     fi
-    
     echo "✅ Done ${sample}"
 }
 
 export -f process_sample
-export genome
-export t
+export genome t motif_db tf_meme
 
 # Run all BAMs in parallel
-ls bam/*.bam | parallel -j ${jobs} process_sample {}
+parallel -j ${jobs} process_sample ::: bam/*.bam
+
+frip_file="results/combined_index_FRiP.txt"
+echo -e "Sample\tTotalReads\tMappedReads\tReadsInPeaks\tFRiP" > $frip_file
+
+for file in results/frip/*.txt.summary; do
+    sample=$(basename "$file" .txt.summary)
+
+    assigned=$(awk '/Assigned/ {print $2}' "$file")
+    unmapped=$(awk '/Unassigned_Unmapped/ {print $2}' "$file")
+    nofeature=$(awk '/Unassigned_NoFeatures/ {print $2}' "$file")
+
+    total=$((assigned + nofeature + unmapped))
+    mapped=$((assigned + nofeature))
+    frip=$(awk -v a="$assigned" -v m="$mapped" 'BEGIN {printf "%.4f", a/m}')
+
+    echo -e "${sample}\t${total}\t${mapped}\t${assigned}\t${frip}" >> $frip_file
+done
 
 echo "🎉 ALL DONE"
