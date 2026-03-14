@@ -30,13 +30,13 @@ process_sample() {
 
     echo "=== Processing sample: ${sample} ==="
 
-    # Peak calling
+    # Peak calling: using -f BAMPE is not better for motif calling than -f BAM
     peak_file="peaks/${sample}_peaks.narrowPeak"
     if [ ! -f "${peak_file}" ]; then
         echo "  Calling peaks for ${sample}"
         macs3 callpeak \
             -t "bam/${sample}.bam" \
-            -f BAMPE \
+            -f BAM \
             -g hs \
             -n "peaks/${sample}" \
             -q 0.01 \
@@ -46,8 +46,19 @@ process_sample() {
         bedGraphToBigWig "peaks/${sample}_treat_pileup.bdg" \
             "${genome}/hg38.chrom.sizes" \
             "peaks/${sample}_SPMR_FE.bw"
+
+        sort -k8,8nr peaks/${sample}_peaks.narrowPeak > peaks/${sample}.sorted.narrowPeak
     else
         echo "  Peaks already exist for ${sample}, skipping peak calling."
+    fi
+
+    # Convert narrowPeak to BED
+    bed_file="peaks/${sample}_peaks.bed"
+    if [ ! -f "${bed_file}" ]; then
+        cut -f 1-3 peaks/${sample}.sorted.narrowPeak > "${bed_file}"
+        echo "✅ Created BED file for ${sample}"
+    else
+        echo "  BED file already exists for ${sample}, skipping."
     fi
 
     # Coverage track
@@ -77,15 +88,6 @@ process_sample() {
             > "logs/${sample}_qualimap.log" 2>&1
     else
         echo "  QC already exists for ${sample}, skipping Qualimap."
-    fi
-
-    # Convert narrowPeak to BED
-    bed_file="peaks/${sample}_peaks.bed"
-    if [ ! -f "${bed_file}" ]; then
-        sort -k7,7nr "$peak_file" | cut -f1-3 > "$bed_file"
-        echo "✅ Created BED file for ${sample}"
-    else
-        echo "  BED file already exists for ${sample}, skipping."
     fi
 
     # Calculating FRiP
