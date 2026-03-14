@@ -18,10 +18,10 @@ fi
 
 
 t=6  # threads per job
-jobs=3  # number of parallel samples
+jobs=4  # number of parallel samples
 
 
-mkdir -p qc logs peaks bw results results/frip
+mkdir -p qc logs marked peaks bw results results/frip
 
 # Function to process a single BAM file
 process_sample() {
@@ -29,13 +29,55 @@ process_sample() {
     local sample=$(basename "${i%.bam}")
 
     echo "=== Processing sample: ${sample} ==="
+    # QC
+    qc_dir="qc/${sample}"
+    if [ ! -d "${qc_dir}" ]; then
+        echo "  Running Qualimap QC for ${sample}"
+        qualimap bamqc \
+            -bam "bam/${sample}.bam" \
+            -outdir "${qc_dir}" \
+            -nt "${t}" \
+            --java-mem-size=8G \
+            > "logs/${sample}_qualimap.log" 2>&1
+    else
+        echo "  QC already exists for ${sample}, skipping Qualimap."
+    fi
+
+    # Coverage track
+    bw_file="bw/${sample}.bw"
+    if [ ! -f "${bw_file}" ]; then
+        echo "  Generating coverage track for ${sample}"
+        bamCoverage \
+            -b "bam/${sample}.bam" \
+            -o "${bw_file}" \
+            --normalizeUsing CPM \
+            --binSize 50 \
+            -p "${t}" \
+            > "logs/${sample}_bw.log" 2>&1
+    else
+    
+    echo "  Coverage track already exists for ${sample}, skipping bamCoverage."
+    fi
+
+
+    mark_file="marked/${sample}_metrics.txt"
+    if [ ! -f "${peak_file}" ]; then
+        echo "Marking duplicates for ${sample}"
+        picard MarkDuplicates \
+            I=$i \
+            O=/dev/null \
+            M=marked/${sample}_metrics.txt \
+            CREATE_INDEX=true \
+            REMOVE_DUPLICATES=false \
+            VALIDATION_STRINGENCY=SILENT
+    fi
 
     # Peak calling: using -f BAMPE is not better for motif calling than -f BAM
     peak_file="peaks/${sample}_peaks.narrowPeak"
     if [ ! -f "${peak_file}" ]; then
         echo "  Calling peaks for ${sample}"
         macs3 callpeak \
-            -t "bam/${sample}.bam" \
+            -t $i \
             -f BAM \
             -g hs \
             -n "peaks/${sample}" \
@@ -61,34 +103,6 @@ process_sample() {
         echo "  BED file already exists for ${sample}, skipping."
     fi
 
-    # Coverage track
-    bw_file="bw/${sample}.bw"
-    if [ ! -f "${bw_file}" ]; then
-        echo "  Generating coverage track for ${sample}"
-        bamCoverage \
-            -b "bam/${sample}.bam" \
-            -o "${bw_file}" \
-            --normalizeUsing CPM \
-            --binSize 50 \
-            -p "${t}" \
-            > "logs/${sample}_bw.log" 2>&1
-    else
-        echo "  Coverage track already exists for ${sample}, skipping bamCoverage."
-    fi
-
-    # QC
-    qc_dir="qc/${sample}"
-    if [ ! -d "${qc_dir}" ]; then
-        echo "  Running Qualimap QC for ${sample}"
-        qualimap bamqc \
-            -bam "bam/${sample}.bam" \
-            -outdir "${qc_dir}" \
-            -nt "${t}" \
-            --java-mem-size=8G \
-            > "logs/${sample}_qualimap.log" 2>&1
-    else
-        echo "  QC already exists for ${sample}, skipping Qualimap."
-    fi
 
     # Calculating FRiP
     saf_file="peaks/${sample}.saf"

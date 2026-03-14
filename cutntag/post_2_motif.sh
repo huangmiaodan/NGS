@@ -23,13 +23,13 @@ else
     tf_meme=$3
 fi
 
-
-mkdir -p meme memechip fimo
+jobs=4
+mkdir -p memechip fimo
 
 # Function to process a single BAM file
-for i in bam/*.bam
-do
-    sample=$(basename "${i%.bam}")
+process_sample() {
+    local i=$1
+    local sample=$(basename "${i%.bam}")
 
     echo "=== Processing sample: ${sample} ==="
     fasta_file="peaks/${sample}_peaks.fasta"
@@ -56,7 +56,13 @@ do
         echo "  FIMO output exists for ${sample}, skipping."
     fi
     echo "✅ Done ${sample}"
-done
+}
+
+export -f process_sample
+export genome t motif_db tf_meme 
+
+# Run all BAMs in parallel
+parallel -j ${jobs} process_sample ::: bam/*.bam
 
 
 echo "🎉 ALL DONE"
